@@ -1,0 +1,35 @@
+# Dependências locais
+node_modules
+**/node_modules
+
+# Builds
+dist
+**/dist
+build
+**/build
+.next
+**/.next
+
+# Testes / coverage
+coverage
+**/coverage
+
+# Cache
+.cache
+**/.cache
+.vite
+**/.vite
+
+# Git
+.git
+.gitignore
+
+# Variáveis de ambiente locais
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Exceções necessárias para documentação de configuração
+!infra/public/.env.public.example
+!infra/local/.env.example

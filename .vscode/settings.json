@@ -1,0 +1,12 @@
+{
+  "eslint.workingDirectories": [
+    "Vitare/apps/api",
+    "Vitare/apps/web"
+  ],
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ]
+}

@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:22-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+WORKDIR /workspace
+
+RUN corepack enable \
+    && corepack prepare pnpm@11.9.0 --activate
+
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/web-staff/package.json apps/web-staff/package.json
+COPY packages/core-typings/package.json packages/core-typings/package.json
+COPY packages/ui-components/package.json packages/ui-components/package.json
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS build
+COPY apps/api apps/api
+# prebuild (pnpm) executa `prisma generate` antes de nest build — a saída
+# real do compilador é dist/src/main.js (verificado no build local).
+RUN pnpm --filter @vitare/api build \
+    && pnpm --filter @vitare/api deploy --prod /out/api
+
+# One-shot migration image. It intentionally retains the development
+# dependency graph because Prisma CLI is a devDependency in the repository.
+FROM build AS migrate
+WORKDIR /workspace/apps/api
+ENV NODE_ENV=production
+CMD ["pnpm", "exec", "prisma", "migrate", "deploy"]
+
+FROM node:22-bookworm-slim AS runtime
+ENV NODE_ENV=production
+ENV PORT=3000
+WORKDIR /app
+
+RUN useradd --system --create-home --uid 10001 vitare
+
+COPY --from=build /out/api/ ./
+COPY --from=build /workspace/apps/api/dist ./dist
+COPY --from=build /workspace/apps/api/generated ./generated
+COPY --from=build /workspace/apps/api/prisma ./prisma
+
+USER vitare
+EXPOSE 3000
+
+CMD ["node", "dist/src/main.js"]

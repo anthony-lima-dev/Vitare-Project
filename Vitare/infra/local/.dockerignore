@@ -1,0 +1,11 @@
+.git
+.gitignore
+**/node_modules
+**/dist
+**/.env
+**/.env.local
+**/coverage
+infra/local/certs/*
+infra/local/backups/*
+apps/anotacoes
+apps/erro

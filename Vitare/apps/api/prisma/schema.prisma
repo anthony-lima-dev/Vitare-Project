@@ -1,0 +1,410 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EmergencyStatus {
+  TRIGGERED
+  NOTIFIED
+  ACCEPTED
+  RESOLVED
+}
+
+enum StaffRole {
+  MEDICO_SOCORRISTA
+  ENFERMEIRO_SOCORRISTA
+  TECNICO_ENFERMAGEM
+  OPERADOR_TACTICAL
+  ADMINISTRATIVO
+}
+
+model User {
+  id           String  @id @default(uuid()) @db.Uuid
+  passwordHash String? @map("password_hash")
+  googleId     String? @unique @map("google_id") @db.VarChar(255)
+  avatarUrl    String? @map("avatar_url")
+  bloodType    String? @map("blood_type") @db.VarChar(5)
+
+  // --- Criptografia de PII (T-08): texto cifrado + índice cego (HMAC) ---
+  // Colunas de plaintext REMOVIDAS na migracao B (apos compatibilidade
+  // verificada). Restam apenas texto cifrado e o indice cego.
+  emailEnc          String?  @map("email_enc") @db.VarChar(512)
+  emailBlindedIndex String?  @unique @map("email_blinded_index") @db.VarChar(64)
+  cpfEnc            String?  @map("cpf_enc") @db.VarChar(512)
+  cpfBlindedIndex   String?  @unique @map("cpf_blinded_index") @db.VarChar(64)
+  phoneEnc          String?  @map("phone_enc") @db.VarChar(512)
+  addressEnc        String?  @map("address_enc") @db.Text
+  birthDateEnc      String?  @map("birth_date_enc") @db.Text
+  fullNameEnc       String?  @map("full_name_enc") @db.VarChar(512)
+  weightKg          Decimal? @map("weight_kg") @db.Decimal(5, 2)
+  heightCm          Int?     @map("height_cm")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  conditions           ChronicCondition[]
+  medications          Medication[]
+  medicationHistory    MedicationHistory[]
+  contacts             EmergencyContact[]
+  emergencyEvents      EmergencyEvent[]
+  refreshTokens        RefreshToken[]
+  passwordResetTokens  PasswordResetToken[]
+  allergies            Allergy[]
+  forbiddenMedications ForbiddenMedication[]
+
+  @@map("users")
+}
+
+model ChronicCondition {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  diseaseId   String    @map("disease_id") @db.Uuid
+  notes       String?
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  notesEnc    String?   @map("notes_enc") @db.Text
+  diagnosedAt DateTime? @map("diagnosed_at") @db.Date
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  disease DiseaseDictionary @relation(fields: [diseaseId], references: [id])
+
+  @@index([userId, isActive])
+  @@map("chronic_conditions")
+}
+
+model Medication {
+  id                      String    @id @default(uuid()) @db.Uuid
+  userId                  String    @map("user_id") @db.Uuid
+  medicationsDictionaryId String?   @map("medications_dictionary_id") @db.Uuid
+  name                    String    @db.VarChar(255)
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  nameEnc                 String?   @map("name_enc") @db.Text
+  dosage                  String    @db.VarChar(100)
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  dosageEnc               String?   @map("dosage_enc") @db.Text
+  frequency               String    @db.VarChar(100)
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  frequencyEnc            String?   @map("frequency_enc") @db.Text
+  startDate               DateTime  @map("start_date") @db.Date
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  startDateEnc            String?   @map("start_date_enc") @db.Text
+  endDate                 DateTime? @map("end_date") @db.Date
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  endDateEnc              String?   @map("end_date_enc") @db.Text
+  notes                   String?
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  notesEnc                String?   @map("notes_enc") @db.Text
+  isActive                Boolean   @default(true) @map("is_active")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicationsDictionary MedicationsDictionary? @relation(fields: [medicationsDictionaryId], references: [id], onDelete: SetNull)
+  history               MedicationHistory[]
+
+  @@index([userId, isActive])
+  @@index([userId, medicationsDictionaryId])
+  @@map("medications")
+}
+
+model MedicationHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  medicationId String   @map("medication_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  changedAt    DateTime @default(now()) @map("changed_at")
+  changedField String   @map("changed_field") @db.VarChar(100)
+  oldValue     String?  @map("old_value")
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  oldValueEnc  String?  @map("old_value_enc") @db.Text
+  newValue     String?  @map("new_value")
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  newValueEnc  String?  @map("new_value_enc") @db.Text
+
+  medication Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([medicationId, changedAt(sort: Desc)])
+  @@index([userId])
+  @@map("medication_history")
+}
+
+model EmergencyContact {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  name            String   @db.VarChar(255)
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  nameEnc         String?  @map("name_enc") @db.Text
+  phone           String   @db.VarChar(30)
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  phoneEnc        String?  @map("phone_enc") @db.Text
+  relationship    String?  @db.VarChar(100)
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  relationshipEnc String?  @map("relationship_enc") @db.Text
+  isPrimary       Boolean  @default(false) @map("is_primary")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("emergency_contacts")
+}
+
+model EmergencyEvent {
+  id                 String          @id @default(uuid()) @db.Uuid
+  userId             String          @map("user_id") @db.Uuid
+  triggeredAt        DateTime        @default(now()) @map("triggered_at")
+  latitude           Decimal?        @db.Decimal(10, 8)
+  longitude          Decimal?        @db.Decimal(11, 8)
+  patientSnapshot    Json            @map("patient_snapshot") @db.JsonB
+  // --- Criptografia de dados clínicos (T-09): texto cifrado do snapshot JSON ---
+  patientSnapshotEnc String?         @map("patient_snapshot_enc") @db.Text
+  status             EmergencyStatus @default(TRIGGERED)
+  notes              String?
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  notesEnc           String?         @map("notes_enc") @db.Text
+  assignedStaffId    String?         @map("assigned_staff_id") @db.Uuid
+  acceptedAt         DateTime?       @map("accepted_at")
+  resolvedAt         DateTime?       @map("resolved_at")
+
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedStaff Staff? @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+
+  @@index([userId, triggeredAt(sort: Desc)])
+  @@index([triggeredAt(sort: Desc), id(sort: Desc)])
+  @@map("emergency_events")
+}
+
+/// Idempotência persistente do acionamento de emergência (e futuras
+/// operações mutáveis reenviáveis pelo PWA). A chave é associada ao
+/// solicitante e ao escopo da operação, com fingerprint do payload para
+/// rejeitar reutilização divergente.
+model IdempotencyRecord {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  scope           String    @db.VarChar(100)
+  key             String    @db.VarChar(128)
+  requestHash     String    @map("request_hash") @db.VarChar(64)
+  status          String    @default("IN_PROGRESS") @db.VarChar(20) // IN_PROGRESS | COMPLETED | FAILED
+  responsePayload Json?     @map("response_payload") @db.JsonB
+  createdAt       DateTime  @default(now()) @map("created_at")
+  completedAt     DateTime? @map("completed_at")
+  expiresAt       DateTime  @map("expires_at")
+
+  @@unique([userId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+/// Outbox do servidor: eventos operacionais a publicar via WebSocket,
+/// gravados na mesma transação do estado de negócio. Um dispatcher
+/// publica e marca o resultado, garantindo recuperação após falhas.
+model OutboxEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  type        String    @db.VarChar(100)
+  payload     Json      @db.JsonB
+  status      String    @default("PENDING") @db.VarChar(20) // PENDING | PUBLISHED | FAILED
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+  lastError   String?   @map("last_error")
+
+  @@index([status, createdAt])
+  @@map("outbox_events")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  usedAt    DateTime? @map("used_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model DiseaseDictionary {
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique @db.VarChar(10)
+  name String @db.Text
+
+  conditions ChronicCondition[]
+
+  @@index([name])
+  @@map("disease_dictionary")
+}
+
+model DiseaseGroup {
+  id         String @id @default(uuid()) @db.Uuid
+  start_code String @map("start_code")
+  end_code   String @map("end_code")
+  name       String @db.VarChar(255)
+
+  @@unique([start_code, end_code])
+  @@map("disease_groups")
+}
+
+model MedicationsDictionary {
+  id            String   @id @default(uuid()) @db.Uuid
+  nome          String   @db.VarChar(255)
+  laboratorio   String   @db.VarChar(255)
+  substancias   String[]
+  apresentacoes String[]
+  tarjas        String[]
+
+  medications          Medication[]
+  forbiddenMedications ForbiddenMedication[]
+
+  @@index([nome])
+  @@map("medications_dictionary")
+}
+
+model Allergy {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  nameEnc     String?  @map("name_enc") @db.Text
+  severity    String?  @db.VarChar(50)
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  severityEnc String?  @map("severity_enc") @db.Text
+  notes       String?
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  notesEnc    String?  @map("notes_enc") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("allergies")
+}
+
+model ForbiddenMedication {
+  id                      String   @id @default(uuid()) @db.Uuid
+  userId                  String   @map("user_id") @db.Uuid
+  medicationsDictionaryId String   @map("medications_dictionary_id") @db.Uuid
+  reason                  String
+  // --- Criptografia de dados clínicos (T-09): texto cifrado ---
+  reasonEnc               String?  @map("reason_enc") @db.Text
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicationsDictionary MedicationsDictionary @relation(fields: [medicationsDictionaryId], references: [id])
+
+  @@unique([userId, medicationsDictionaryId])
+  @@index([userId])
+  @@map("forbidden_medications")
+}
+
+model Staff {
+  id           String    @id @default(uuid()) @db.Uuid
+  role         StaffRole
+  passwordHash String?   @map("password_hash")
+  createdAt    DateTime  @default(now())
+
+  // --- Criptografia de PII (T-08): texto cifrado + índice cego (HMAC) ---
+  // Colunas de plaintext REMOVIDAS na migracao B (apos compatibilidade
+  // verificada). Restam apenas texto cifrado e o indice cego.
+  emailEnc              String?  @map("email_enc") @db.VarChar(512)
+  emailBlindedIndex     String?  @unique @map("email_blinded_index") @db.VarChar(64)
+  cpfEnc                String?  @map("cpf_enc") @db.VarChar(512)
+  cpfBlindedIndex       String?  @unique @map("cpf_blinded_index") @db.VarChar(64)
+  registrationNumberEnc String?  @map("registration_number_enc") @db.Text
+  fullNameEnc           String?  @map("full_name_enc") @db.VarChar(512)
+  updatedAt             DateTime @updatedAt
+
+  emergencyAssignments EmergencyEvent[]
+
+  @@map("staff")
+}
+
+/// Auditoria obrigatória de consultas de prontuário por CPF (LGPD):
+/// registra ator, papel, índice cego do CPF pesquisado (HMAC — sem o valor
+/// direto) e resultado de TODA tentativa.
+model PatientLookupAudit {
+  id          String   @id @default(uuid()) @db.Uuid
+  staffId     String   @map("staff_id") @db.Uuid
+  staffRole   String   @map("staff_role") @db.VarChar(40)
+  cpfSearched String   @map("cpf_searched") @db.VarChar(64)
+  outcome     String   @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([staffId, createdAt])
+  @@index([cpfSearched])
+  @@map("patient_lookup_audits")
+}
+
+/// Tipo de ato jurídico registrado em trilha de auditoria (T-10).
+/// Termos de Uso = aceite contratual; Aviso de Privacidade = ciência;
+/// Consentimento Explícito = base legal de consentimento (LGPD).
+enum LegalActType {
+  TERMS_OF_USE
+  PRIVACY_NOTICE
+  EXPLICIT_CONSENT
+}
+
+/// Base legal definida para a finalidade do tratamento (LGPD Art. 7º/11).
+/// O consentimento NÃO é presumido como a única base legal possível.
+enum LegalBasis {
+  CONSENT
+  CONTRACT
+  LEGAL_OBLIGATION
+  VITAL_INTEREST
+  PUBLIC_TASK
+  LEGITIMATE_INTEREST
+  EXERCISE_OF_RIGHTS
+}
+
+/// Registro versionado e append-only de aceite/ciência/consentimento (T-10).
+/// Sem sobrescrita de eventos históricos: não há @updatedAt e nenhuma
+/// operação de update é exposta na camada de aplicação.
+/// Dados minimizados: IP armazenado apenas como hash (blinded index),
+/// sem secrets nem PII desnecessária.
+model LegalActRecord {
+  id              String   @id @default(uuid()) @db.Uuid
+  actorId         String   @map("actor_id") @db.Uuid
+  actorRole       String   @map("actor_role") @db.VarChar(40)
+  holderId        String   @map("holder_id") @db.Uuid
+  actType         String   @map("act_type") @db.VarChar(30)
+  documentVersion String   @map("document_version") @db.VarChar(50)
+  contentHash     String   @map("content_hash") @db.VarChar(64)
+  purpose         String   @map("purpose") @db.VarChar(200)
+  legalBasis      String   @map("legal_basis") @db.VarChar(40)
+  origin          String   @map("origin") @db.VarChar(100)
+  ipHash          String?  @map("ip_hash") @db.VarChar(64)
+  recordedAt      DateTime @default(now()) @map("recorded_at")
+
+  @@index([holderId, actType, recordedAt])
+  @@index([actorId, recordedAt])
+  @@index([contentHash])
+  @@map("legal_act_records")
+}

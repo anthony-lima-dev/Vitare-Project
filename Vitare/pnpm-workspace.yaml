@@ -1,0 +1,17 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+inject-workspace-packages: true
+allowBuilds:
+  '@prisma/engines': true
+  bcrypt: true
+  esbuild: true
+  prisma: true
+  sharp: true
+  unrs-resolver: true
+overrides:
+  # Deduplica @types/react/@types/react-dom: sem isso, apps/web e
+  # packages/ui-components resolvem versões diferentes e o tsc do web falha
+  # com "Two different types with this name exist" (build de produção).
+  '@types/react': 19.2.17
+  '@types/react-dom': 19.2.3

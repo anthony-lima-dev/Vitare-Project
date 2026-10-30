@@ -1,0 +1,170 @@
+name: vitare-public
+
+services:
+  db:
+    image: postgres:17-bookworm
+    container_name: vitare-public-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: America/Sao_Paulo
+    volumes:
+      - vitare_public_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [data]
+    mem_limit: 768m
+    cpus: "1.00"
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/public/Dockerfile.api
+      target: migrate
+    container_name: vitare-public-migrate
+    env_file: [.env.public]
+    environment:
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [data]
+    restart: "no"
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/public/Dockerfile.api
+      target: runtime
+    container_name: vitare-public-api
+    restart: unless-stopped
+    env_file: [.env.public]
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      REDIS_URL: redis://vitare-public-redis:6379
+    expose: ["3000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [app, data]
+    mem_limit: 1024m
+    cpus: "1.50"
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-bookworm
+    container_name: vitare-public-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no"]
+    # Rede interna (internal: true) — nunca exposto à internet.
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+    cpus: "0.25"
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/public/Dockerfile.web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+    container_name: vitare-public-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    expose: ["80"]
+    networks: [edge, app]
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider --header='Host: vitare.app.br' http://127.0.0.1:80/healthz || exit 1"]      
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    mem_limit: 256m
+    cpus: "0.50"
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: vitare-public-cloudflared
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    depends_on:
+      web:
+        condition: service_healthy
+    networks: [edge]
+    env_file: [.env.public]
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pull_policy: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+volumes:
+  vitare_public_pg_data:
+    name: vitare_public_pg_data
+
+networks:
+  edge:
+    name: vitare_public_edge
+  app:
+    name: vitare_public_app
+  data:
+    name: vitare_public_data
+    internal: true
+
+

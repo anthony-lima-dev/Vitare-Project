@@ -1,0 +1,27 @@
+{
+  "name": "TCC-Vitare_2026",
+  "version": "1.0.0",
+  "description": "Vitare — plataforma web/PWA para gestão de informações de saúde e monitoramento de emergências",
+  "main": "index.js",
+  "scripts": {
+    "dev:patient": "pnpm --filter @vitare/web dev",
+    "dev:staff": "pnpm --filter @vitare/web-staff dev",
+    "dev:api": "pnpm --filter @vitare/api start:dev",
+    "build": "pnpm --filter @vitare/core-typings build && pnpm --filter @vitare/ui-components build && pnpm --filter @vitare/api build && pnpm --filter @vitare/web build && pnpm --filter @vitare/web-staff build",
+    "check:infra": "node scripts/check-docker-build-context.mjs",
+    "lint": "pnpm --filter @vitare/web lint && pnpm --filter @vitare/web-staff lint && pnpm --filter @vitare/api lint",
+    "infra:up": "docker compose --env-file infra/local/.env.local -f infra/local/compose.yaml up -d --build",
+    "infra:down": "docker compose --env-file infra/local/.env.local -f infra/local/compose.yaml down",
+    "infra:logs": "docker compose --env-file infra/local/.env.local -f infra/local/compose.yaml logs -f --tail=200"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "sharp": "^0.33.5"
+  }
+}

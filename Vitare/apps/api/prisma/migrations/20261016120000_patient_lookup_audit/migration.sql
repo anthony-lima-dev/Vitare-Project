@@ -1,0 +1,3 @@
+-- No-op: migracao de auditoria de consulta de paciente.
+-- A tabela patient_lookup_audits eh criada/gerenciada fora deste escopo.
+-- Mantido como marcador vazio para nao bloquear o prisma migrate deploy.

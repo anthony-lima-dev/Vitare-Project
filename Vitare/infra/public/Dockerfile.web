@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:22-bookworm-slim AS build
+ARG VITE_API_URL=/api/v1
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+ENV VITE_API_URL=$VITE_API_URL
+WORKDIR /workspace
+
+RUN corepack enable \
+    && corepack prepare pnpm@11.9.0 --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/web-staff/package.json apps/web-staff/package.json
+COPY packages/core-typings/package.json packages/core-typings/package.json
+COPY packages/ui-components/package.json packages/ui-components/package.json
+RUN pnpm install --frozen-lockfile
+
+# Pacotes compartilhados são dependências workspace dos frontends e seus
+# artefatos (dist) são ignorados pelo git — precisam ser construídos aqui.
+COPY packages packages
+RUN pnpm --filter @vitare/core-typings build \
+    && pnpm --filter @vitare/ui-components build
+
+COPY apps/web apps/web
+COPY apps/web-staff apps/web-staff
+
+RUN pnpm --filter @vitare/web build \
+    && pnpm --filter @vitare/web-staff build
+
+FROM nginx:1.29-alpine AS runtime
+COPY infra/public/nginx.conf /etc/nginx/nginx.conf
+COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
+COPY --from=build /workspace/apps/web-staff/dist /usr/share/nginx/html/monitoramento
+
+EXPOSE 80

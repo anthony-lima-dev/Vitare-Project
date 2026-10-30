@@ -1,0 +1,121 @@
+name: vitare-local
+
+services:
+  db:
+    image: postgres:17-bookworm
+    container_name: vitare-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: America/Sao_Paulo
+    volumes:
+      - vitare_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [data]
+    mem_limit: 768m
+    cpus: "1.00"
+    security_opt: [no-new-privileges:true]
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/local/Dockerfile.api
+      target: migrate
+    container_name: vitare-migrate
+    env_file: [.env.local]
+    environment:
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [data]
+    restart: "no"
+
+  redis:
+    image: redis:7-bookworm
+    container_name: vitare-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no"]
+    # Nunca publicado para o host/rede externa — apenas na rede interna.
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+    cpus: "0.25"
+    security_opt: [no-new-privileges:true]
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/local/Dockerfile.api
+      target: runtime
+    container_name: vitare-api
+    restart: unless-stopped
+    env_file: [.env.local]
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      REDIS_URL: redis://vitare-redis:6379
+    expose: ["3000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [edge, data]
+    mem_limit: 1024m
+    cpus: "1.50"
+    security_opt: [no-new-privileges:true]
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/local/Dockerfile.web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+    container_name: vitare-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${HTTP_BIND:-0.0.0.0}:80:80"
+      - "${HTTPS_BIND:-0.0.0.0}:443:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+    networks: [edge]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:80/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    mem_limit: 256m
+    cpus: "0.50"
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  vitare_pg_data:
+    name: vitare_pg_data
+
+networks:
+  edge:
+    name: vitare_edge
+  data:
+    name: vitare_data

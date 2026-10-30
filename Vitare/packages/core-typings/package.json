@@ -1,0 +1,22 @@
+{
+  "name": "@vitare/core-typings",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Tipagens e contratos públicos compartilhados entre os frontends (sem Prisma nem modelos internos da API)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
