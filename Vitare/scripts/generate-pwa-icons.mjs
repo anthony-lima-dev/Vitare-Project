@@ -2,9 +2,9 @@ import sharp from 'sharp';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
-const SOURCE_LOGO = '/home/thony/Documentos/TCC_Vitare_2/TCC-Vitare_2026/apps/web/public/vitare-logo.png';
-const WEB_PUBLIC = '/home/thony/Documentos/TCC_Vitare_2/TCC-Vitare_2026/apps/web/public';
-const STAFF_PUBLIC = '/home/thony/Documentos/TCC_Vitare_2/TCC-Vitare_2026/apps/web-staff/public';
+const SOURCE_LOGO = '../../../TCC_Vitare/Vitare/apps/web/public/vitare-logo.png';
+const WEB_PUBLIC = "../../../TCC_Vitare/Vitare/apps/web/public";
+const STAFF_PUBLIC = "../../../TCC_Vitare/Vitare/apps/web-staff/public";
 
 // Icon sizes needed for PWA
 const ICON_SIZES = [72, 96, 128, 144, 152, 192, 384, 512];

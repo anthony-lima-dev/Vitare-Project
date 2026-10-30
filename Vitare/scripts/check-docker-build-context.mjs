@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Teste de regressão do contexto de build Docker (T-04).
+ * Teste de regressão do contexto de build Docker.
  *
  * Validações:
  * 1. Todos os Dockerfiles ativam a MESMA versão do pnpm declarada em

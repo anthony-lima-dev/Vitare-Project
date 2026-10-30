@@ -11,7 +11,7 @@
 The repository uses pnpm workspaces and organizes applications and shared packages in one project:
 
 ```text
-TCC-Vitare_2026/
+Vitare/
 ├── apps/
 │   ├── api/                 # NestJS, Prisma, and backend rules
 │   ├── web/                 # patient PWA
